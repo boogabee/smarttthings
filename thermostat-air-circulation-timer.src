@@ -1,0 +1,118 @@
+/**
+ *  Thermostat Air Circulation Timer
+ *
+ */
+definition(
+		name: "Thermostat Air Circulation Timer",
+		namespace: "boogabee",
+		author: "boogabee",
+		description: "Thermostat Air Circulation",
+    	category: "Green Living",
+    	iconUrl: "https://s3.amazonaws.com/smartapp-icons/GreenLiving/Cat-GreenLiving.png",
+    	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/GreenLiving/Cat-GreenLiving@2x.png",
+    	iconX3Url: "https://s3.amazonaws.com/smartapp-icons/GreenLiving/Cat-GreenLiving@3x.png"
+        )
+
+preferences {
+	section("Choose thermostat (s)") {
+		input "thermostats", "capability.thermostat", required: true, multiple:true
+	}
+
+	section("Schedule") {
+		input "timeOn1", "time", title: "Start Time 1", required: true
+		input "timeOff1", "time", title: "Stop Time 1", required: true
+		input "timeOn2", "time", title: "Start Time 2", required: true
+		input "timeOff2", "time", title: "Stop Time 2", required: true
+	}
+}
+
+def installed()
+{
+	subscribeToEvents()
+}
+
+def updated()
+{
+    unsubscribe()
+	subscribeToEvents()
+}
+
+def subscribeToEvents() {
+	subscribe(temperatureSensor, "temperature", temperatureHandler)
+    initialize()
+}
+
+def temperatureHandler(evt) {
+    log.debug "temperatureHandler event called"
+    return
+}
+
+// This section determines which day it is.
+def initialize() {
+	log.trace "Initialized with $settings"
+
+	unschedule()
+	def calendar = Calendar.getInstance()
+	calendar.setTimeZone(location.timeZone)
+	def today = calendar.get(Calendar.DAY_OF_WEEK)
+   	def timeNow = now()
+	def midnightToday = timeToday("2000-01-01T23:59:59.999-0000", location.timeZone)
+
+	// This section is where the time/temperature schedule is set
+    // Between 1st StartStop Time
+    if (timeNow >= timeToday(timeOn1, location.timeZone).time && timeNow < timeToday(timeOff1, location.timeZone).time) {
+        changeFanOn()
+        schedule(timeToday(timeOff1, location.timeZone), initialize)
+        log.info("$thermostats Scheduled fan Auto mode at ${timeToday(timeOff1, location.timeZone).format("EEE MMM dd yyyy HH:mm z", location.timeZone)}")
+    }
+    // Between 1st Stop and 2nd Start
+    else if (timeNow >= timeToday(timeOff1, location.timeZone).time && timeNow < timeToday(timeOn2, location.timeZone).time) {
+        changeFanAuto()
+		schedule(timeToday(timeOn2, location.timeZone), initialize)
+        log.info("$thermostats Scheduled fan On mode at ${timeToday(timeOn2, location.timeZone).format("EEE MMM dd yyyy HH:mm z", location.timeZone)}")
+    }
+    // Between 2nd StartStop Time
+    else if (timeNow >= timeToday(timeOn2, location.timeZone).time && timeNow < timeToday(timeOff2, location.timeZone).time) {
+        changeFanOn()
+	    schedule(timeToday(timeOff2, location.timeZone), initialize)
+        log.info("$thermostats Scheduled fan Auto mode at ${timeToday(timeOff2, location.timeZone).format("EEE MMM dd yyyy HH:mm z", location.timeZone)}")
+    }
+    // Between 2nd Stop Time and midnight, schedule next day
+    else if (timeNow >= timeToday(timeOff2, location.timeZone).time && timeNow < midnightToday.time) {
+        changeFanAuto()
+		schedule(timeToday(timeOn1, location.timeZone) + 1, initialize)
+        log.info("$thermostats Scheduled fan On mode at ${(timeToday(timeOn1, location.timeZone) + 1).format("EEE MMM dd yyyy HH:mm z", location.timeZone)}")
+    }
+    // Between midnight 1st Start time, schedule today
+    else if (timeNow >= (midnightToday - 1).time && timeNow < timeToday(timeOn1, location.timeZone).time) {
+        changeFanAuto()
+		schedule(timeToday(timeOn1, location.timeZone), initialize)
+        log.info("$thermostats Scheduled fan On mode at ${timeToday(timeOn1, location.timeZone).format("EEE MMM dd yyyy HH:mm z", location.timeZone)}")
+    }
+				
+}
+
+// This section is where the fan settings are set. 
+def changeFanOn() {
+	thermostats.each { thermostat ->
+        def thermostatFan = thermostat.currentThermostatFanMode
+        log.debug "Thermostat fan = $thermostatFan"
+        // If fan mode is auto change it to on, otherwise we leave it alone
+        if (thermostatFan == "auto") {
+            thermostat.setThermostatFanMode("on")
+            log.info "Set $thermostat Fan On"
+        }
+    }
+}
+
+def changeFanAuto() {
+	thermostats.each { thermostat ->
+        def thermostatFan = thermostat.currentThermostatFanMode
+        log.debug "Thermostat fan = $thermostatFan"
+        // If fan mode is on change it to auto, otherwise we leave it alone
+        if (thermostatState == "on") {
+            thermostat.setThermostatFanMode("auto")
+            log.info "Set $thermostat Fan On"
+        }
+    }
+}
