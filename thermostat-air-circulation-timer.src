@@ -110,9 +110,9 @@ def changeFanAuto() {
         def thermostatFan = thermostat.currentThermostatFanMode
         log.debug "Thermostat fan = $thermostatFan"
         // If fan mode is on change it to auto, otherwise we leave it alone
-        if (thermostatState == "on") {
+        if (thermostatFan == "on") {
             thermostat.setThermostatFanMode("auto")
-            log.info "Set $thermostat Fan On"
+            log.info "Set $thermostat Fan Auto"
         }
     }
 }
